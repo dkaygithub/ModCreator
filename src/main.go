@@ -14,16 +14,20 @@ var (
 )
 
 const (
-	luaSubdir = "luascript"
+	luaSubdir  = "luascript"
+	jsonSubdir = "json"
 )
 
 type Config struct {
-	Name           string `json:"Name"`
-	Version        string `json:"version"`
-	ImagePath      string `json:"ImagePath"`
-	LuaScriptPath  string `json:"LuaScriptPath"`
-	LuaScriptState string `json:"LuaScriptState"`
-	ObjectDir      string
+	Name            string `json:"Name"`
+	Version         string `json:"version"`
+	ImagePath       string `json:"ImagePath"`
+	LuaScriptPath   string `json:"LuaScriptPath"`
+	LuaScriptState  string `json:"LuaScriptState"`
+	TabStatesPath   string `json:"TabStatesPath"`
+	MusicPlayerPath string `json:"MusicPlayerPath"`
+	GridPath        string `json:"GridPath"`
+	ObjectDir       string
 }
 
 // Mod is used as the accurate representation of what gets printed when
@@ -33,6 +37,9 @@ type Mod struct {
 	EpochTime      int64
 	Date           string
 	Tags           []string
+	TabStates      map[string]interface{}
+	MusicPlayer    map[string]interface{}
+	Grid           map[string]interface{}
 	LuaScript      string
 	LuaScriptState string
 	Decals         []*Decal
@@ -99,6 +106,22 @@ func generateMod(p string, c *Config) (*Mod, error) {
 	var m Mod
 
 	m.SaveName = c.Name
+
+	err := putEncodedJSON(&m.TabStates, p, c.TabStatesPath)
+	if err != nil {
+		return nil, err
+	}
+
+	err = putEncodedJSON(&m.MusicPlayer, p, c.MusicPlayerPath)
+	if err != nil {
+		return nil, err
+	}
+
+	err = putEncodedJSON(&m.Grid, p, c.GridPath)
+	if err != nil {
+		return nil, err
+	}
+
 	encoded, err := encodeLuaScript(p, c.LuaScriptPath)
 	if err != nil {
 		return nil, fmt.Errorf("encodeLuaScript(%s) : %v", c.LuaScriptPath, err)
@@ -107,6 +130,15 @@ func generateMod(p string, c *Config) (*Mod, error) {
 	m.LuaScriptState = c.LuaScriptState
 
 	return &m, nil
+}
+
+func putEncodedJSON(to *map[string]interface{}, p, f string) error {
+	jsonEnc, err := encodeJSON(p, f)
+	if err != nil {
+		return err
+	}
+	*to = jsonEnc
+	return nil
 }
 
 func printMod(p string, m *Mod) error {
@@ -133,4 +165,24 @@ func encodeLuaScript(p, f string) (string, error) {
 	}
 
 	return string(b), nil
+}
+
+func encodeJSON(p, f string) (map[string]interface{}, error) {
+	path := p + "/" + jsonSubdir + "/" + f
+	jFile, err := os.Open(path)
+	// if we os.Open returns an error then handle it
+	if err != nil {
+		return nil, fmt.Errorf("os.Open(%s): %v", path, err)
+	}
+	defer jFile.Close()
+
+	b, err := ioutil.ReadAll(jFile)
+	if err != nil {
+		return nil, err
+	}
+
+	var v map[string]interface{}
+	json.Unmarshal([]byte(b), &v)
+
+	return v, nil
 }
