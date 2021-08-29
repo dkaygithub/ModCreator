@@ -5,5 +5,7 @@
   "LuaScriptState": "",
   "TabStatesPath": "tabStates.json",
   "MusicPlayerPath": "music.json",
-  "GridPath": "grid.json"
+  "GridPath": "grid.json",
+  "LightingPath": "lighting.json",
+  "DecalPalletPath": "decalPallet.json"
 }

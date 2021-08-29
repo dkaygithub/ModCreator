@@ -18,6 +18,7 @@ const (
 	jsonSubdir = "json"
 )
 
+// Config is how users will specify their mod's configuration.
 type Config struct {
 	Name            string `json:"Name"`
 	Version         string `json:"version"`
@@ -27,8 +28,17 @@ type Config struct {
 	TabStatesPath   string `json:"TabStatesPath"`
 	MusicPlayerPath string `json:"MusicPlayerPath"`
 	GridPath        string `json:"GridPath"`
+	LightingPath    string `json:"LightingPath"`
+	DecalPalletPath string `json:"DecalPalletPath"`
+	SnapPointsPath  string `json:"SnapPointsPath"`
 	ObjectDir       string
 }
+
+// Obj is a simpler way to refer to a json map.
+type Obj map[string]interface{}
+
+// ObjArray is a simple way to refer to an array of json maps
+type ObjArray []Obj
 
 // Mod is used as the accurate representation of what gets printed when
 // module creation is done
@@ -37,14 +47,16 @@ type Mod struct {
 	EpochTime      int64
 	Date           string
 	Tags           []string
-	TabStates      map[string]interface{}
-	MusicPlayer    map[string]interface{}
-	Grid           map[string]interface{}
+	TabStates      Obj
+	MusicPlayer    Obj
+	Grid           Obj
+	Lighting       Obj
+	DecalPallet    ObjArray
 	LuaScript      string
 	LuaScriptState string
 	Decals         []*Decal
 	ObjectStates   []*Object
-	SnapPoints     []*SnapPoint
+	SnapPoints     ObjArray
 }
 
 type Decal struct {
@@ -53,9 +65,6 @@ type Decal struct {
 
 type Object struct {
 	FooObj string
-}
-type SnapPoint struct {
-	SnapField string
 }
 
 func main() {
@@ -107,20 +116,16 @@ func generateMod(p string, c *Config) (*Mod, error) {
 
 	m.SaveName = c.Name
 
-	err := putEncodedJSON(&m.TabStates, p, c.TabStatesPath)
-	if err != nil {
-		return nil, err
-	}
+	putEncodedJSON(&m.TabStates, p, c.TabStatesPath)
 
-	err = putEncodedJSON(&m.MusicPlayer, p, c.MusicPlayerPath)
-	if err != nil {
-		return nil, err
-	}
+	putEncodedJSON(&m.MusicPlayer, p, c.MusicPlayerPath)
 
-	err = putEncodedJSON(&m.Grid, p, c.GridPath)
-	if err != nil {
-		return nil, err
-	}
+	putEncodedJSON(&m.Grid, p, c.GridPath)
+
+	putEncodedJSON(&m.Lighting, p, c.LightingPath)
+
+	putEncodedJSONArray(&m.DecalPallet, p, c.DecalPalletPath)
+	putEncodedJSONArray(&m.SnapPoints, p, c.DecalPalletPath)
 
 	encoded, err := encodeLuaScript(p, c.LuaScriptPath)
 	if err != nil {
@@ -132,13 +137,26 @@ func generateMod(p string, c *Config) (*Mod, error) {
 	return &m, nil
 }
 
-func putEncodedJSON(to *map[string]interface{}, p, f string) error {
+func putEncodedJSON(to *Obj, p, f string) {
 	jsonEnc, err := encodeJSON(p, f)
 	if err != nil {
-		return err
+		log.Printf("encodeJson(%s,%s) : %v\n", p, f, err)
+		*to = Obj{}
+		return
 	}
 	*to = jsonEnc
-	return nil
+	return
+}
+
+func putEncodedJSONArray(to *ObjArray, p, f string) {
+	jsonEnc, err := encodeJSONArray(p, f)
+	if err != nil {
+		log.Printf("encodeJsonArray(%s,%s) : %v\n", p, f, err)
+		*to = ObjArray{}
+		return
+	}
+	*to = jsonEnc
+	return
 }
 
 func printMod(p string, m *Mod) error {
@@ -167,7 +185,7 @@ func encodeLuaScript(p, f string) (string, error) {
 	return string(b), nil
 }
 
-func encodeJSON(p, f string) (map[string]interface{}, error) {
+func encodeJSON(p, f string) (Obj, error) {
 	path := p + "/" + jsonSubdir + "/" + f
 	jFile, err := os.Open(path)
 	// if we os.Open returns an error then handle it
@@ -181,7 +199,27 @@ func encodeJSON(p, f string) (map[string]interface{}, error) {
 		return nil, err
 	}
 
-	var v map[string]interface{}
+	var v Obj
+	json.Unmarshal([]byte(b), &v)
+
+	return v, nil
+}
+
+func encodeJSONArray(p, f string) (ObjArray, error) {
+	path := p + "/" + jsonSubdir + "/" + f
+	jFile, err := os.Open(path)
+	// if we os.Open returns an error then handle it
+	if err != nil {
+		return nil, fmt.Errorf("os.Open(%s): %v", path, err)
+	}
+	defer jFile.Close()
+
+	b, err := ioutil.ReadAll(jFile)
+	if err != nil {
+		return nil, err
+	}
+
+	var v ObjArray
 	json.Unmarshal([]byte(b), &v)
 
 	return v, nil
