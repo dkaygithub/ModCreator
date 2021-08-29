@@ -1,4 +1,6 @@
 {
   "Name": "simple",
-  "ImagePath": "SCE.png"
+  "ImagePath": "SCE.png",
+  "LuaScriptPath": "Global.-1.ttslua",
+  "LuaScriptState": ""
 }
