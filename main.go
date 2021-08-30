@@ -1,6 +1,7 @@
 package main
 
 import (
+	objects "ModCreator/objects"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -38,7 +39,7 @@ type Config struct {
 type Obj map[string]interface{}
 
 // ObjArray is a simple way to refer to an array of json maps
-type ObjArray []Obj
+type ObjArray []map[string]interface{}
 
 // Mod is used as the accurate representation of what gets printed when
 // module creation is done
@@ -54,17 +55,9 @@ type Mod struct {
 	DecalPallet    ObjArray
 	LuaScript      string
 	LuaScriptState string
-	Decals         []*Decal
-	ObjectStates   []*Object
+	Decals         ObjArray
+	ObjectStates   ObjArray
 	SnapPoints     ObjArray
-}
-
-type Decal struct {
-	DecalField string
-}
-
-type Object struct {
-	FooObj string
 }
 
 func main() {
@@ -133,6 +126,8 @@ func generateMod(p string, c *Config) (*Mod, error) {
 	}
 	m.LuaScript = encoded
 	m.LuaScriptState = c.LuaScriptState
+
+	m.ObjectStates = objects.ParseAllObjectStates(p + "/" + c.ObjectDir)
 
 	return &m, nil
 }

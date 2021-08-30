@@ -7,5 +7,6 @@
   "MusicPlayerPath": "music.json",
   "GridPath": "grid.json",
   "LightingPath": "lighting.json",
-  "DecalPalletPath": "decalPallet.json"
+  "DecalPalletPath": "decalPallet.json",
+  "ObjectDir": "objects"
 }

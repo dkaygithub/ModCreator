@@ -1,3 +1,3 @@
-module Projects/TTS/Mod_Creator
+module ModCreator
 
 go 1.17
