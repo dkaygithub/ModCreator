@@ -1,6 +1,7 @@
 package main
 
 import (
+	file "ModCreator/file"
 	objects "ModCreator/objects"
 	"encoding/json"
 	"flag"
@@ -8,10 +9,11 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
+	"path"
 )
 
 var (
-	path = flag.String("path", "testdata/simple", "a directory containing tts mod configs")
+	config = flag.String("config", "testdata/simple", "a directory containing tts mod configs")
 )
 
 const (
@@ -62,17 +64,20 @@ type Mod struct {
 
 func main() {
 	flag.Parse()
-	c, err := readConfig(*path)
+
+	lua := file.NewReader(path.Join(*config, luaSubdir))
+
+	c, err := readConfig(*config)
 	if err != nil {
-		fmt.Printf("readConfig(%s) : %v\n", *path, err)
+		fmt.Printf("readConfig(%s) : %v\n", *config, err)
 		return
 	}
-	m, err := generateMod(*path, c)
+	m, err := generateMod(*config, lua, c)
 	if err != nil {
 		fmt.Printf("generateMod(<config>) : %v\n", err)
 		return
 	}
-	err = printMod(*path, m)
+	err = printMod(*config, m)
 	if err != nil {
 		log.Fatalf("printMod(...) : %v", err)
 	}
@@ -80,17 +85,17 @@ func main() {
 
 func readConfig(cPath string) (*Config, error) {
 	// Open our jsonFile
-	cFile, err := os.Open(cPath + "/config.json")
+	cFile, err := os.Open(path.Join(cPath, "config.json"))
 	// if we os.Open returns an error then handle it
 	if err != nil {
-		return nil, fmt.Errorf("os.Open(%s): %v", cPath+"/config.json", err)
+		return nil, fmt.Errorf("os.Open(%s): %v", path.Join(cPath, "config.json"), err)
 	}
 	// defer the closing of our jsonFile so that we can parse it later on
 	defer cFile.Close()
 
 	b, err := ioutil.ReadAll(cFile)
 	if err != nil {
-		return nil, fmt.Errorf("ioutil.Readall(%s) : %v", cPath+"/config.json", err)
+		return nil, fmt.Errorf("ioutil.Readall(%s) : %v", path.Join(cPath, "config.json"), err)
 	}
 	var c Config
 
@@ -101,7 +106,7 @@ func readConfig(cPath string) (*Config, error) {
 	return &c, nil
 }
 
-func generateMod(p string, c *Config) (*Mod, error) {
+func generateMod(p string, lua *file.LuaReader, c *Config) (*Mod, error) {
 	if c == nil {
 		return nil, fmt.Errorf("nil config")
 	}
@@ -120,15 +125,17 @@ func generateMod(p string, c *Config) (*Mod, error) {
 	putEncodedJSONArray(&m.DecalPallet, p, c.DecalPalletPath)
 	putEncodedJSONArray(&m.SnapPoints, p, c.DecalPalletPath)
 
-	encoded, err := encodeLuaScript(p, c.LuaScriptPath)
+	encoded, err := lua.EncodeFromFile(c.LuaScriptPath)
 	if err != nil {
-		return nil, fmt.Errorf("encodeLuaScript(%s) : %v", c.LuaScriptPath, err)
+		return nil, fmt.Errorf("lua.EncodeFromFile(%s) : %v", c.LuaScriptPath, err)
 	}
 	m.LuaScript = encoded
 	m.LuaScriptState = c.LuaScriptState
 
-	m.ObjectStates = objects.ParseAllObjectStates(p + "/" + c.ObjectDir)
-
+	m.ObjectStates, err = objects.ParseAllObjectStates(path.Join(p, c.ObjectDir), lua)
+	if err != nil {
+		return nil, fmt.Errorf("objects.ParseAllObjectStates(%s) : %v", path.Join(p, c.ObjectDir), err)
+	}
 	return &m, nil
 }
 
@@ -160,32 +167,15 @@ func printMod(p string, m *Mod) error {
 		return fmt.Errorf("json.MarshalIndent(<mod>) : %v", err)
 	}
 
-	return ioutil.WriteFile(p+"/output.json", b, 0644)
+	return ioutil.WriteFile(path.Join(p, "output.json"), b, 0644)
 }
 
-func encodeLuaScript(p, f string) (string, error) {
-	path := p + "/" + luaSubdir + "/" + f
-	sFile, err := os.Open(path)
+func encodeJSON(configPath, f string) (Obj, error) {
+	p := path.Join(configPath, jsonSubdir, f)
+	jFile, err := os.Open(p)
 	// if we os.Open returns an error then handle it
 	if err != nil {
-		return "", fmt.Errorf("os.Open(%s): %v", path, err)
-	}
-	defer sFile.Close()
-
-	b, err := ioutil.ReadAll(sFile)
-	if err != nil {
-		return "", err
-	}
-
-	return string(b), nil
-}
-
-func encodeJSON(p, f string) (Obj, error) {
-	path := p + "/" + jsonSubdir + "/" + f
-	jFile, err := os.Open(path)
-	// if we os.Open returns an error then handle it
-	if err != nil {
-		return nil, fmt.Errorf("os.Open(%s): %v", path, err)
+		return nil, fmt.Errorf("os.Open(%s): %v", p, err)
 	}
 	defer jFile.Close()
 
@@ -200,12 +190,12 @@ func encodeJSON(p, f string) (Obj, error) {
 	return v, nil
 }
 
-func encodeJSONArray(p, f string) (ObjArray, error) {
-	path := p + "/" + jsonSubdir + "/" + f
-	jFile, err := os.Open(path)
+func encodeJSONArray(configPath, f string) (ObjArray, error) {
+	p := path.Join(configPath, jsonSubdir, f)
+	jFile, err := os.Open(p)
 	// if we os.Open returns an error then handle it
 	if err != nil {
-		return nil, fmt.Errorf("os.Open(%s): %v", path, err)
+		return nil, fmt.Errorf("os.Open(%s): %v", p, err)
 	}
 	defer jFile.Close()
 
