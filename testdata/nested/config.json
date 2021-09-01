@@ -1,7 +1,6 @@
 {
-  "Name": "simple",
+  "SaveName": "nested",
   "ImagePath": "SCE.png",
-  "LuaScriptPath": "Global.-1.ttslua",
-  "LuaScriptState": "",
-  "ObjectDir": "objects"
+  "LuaScript_path": "Global.-1.ttslua",
+  "LuaScriptState": ""
 }

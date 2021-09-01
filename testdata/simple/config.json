@@ -1,5 +1,5 @@
 {
-  "Name": "simple",
+  "SaveName": "simple",
   "ImagePath": "SCE.png",
   "LuaScriptPath": "Global.-1.ttslua",
   "LuaScriptState": "",
@@ -8,6 +8,5 @@
   "GridPath": "grid.json",
   "LightingPath": "lighting.json",
   "DecalPalletPath": "decalPallet.json",
-  "SnapPointsPath": "snapPoints.json",
-  "ObjectDir": "objects"
+  "SnapPointsPath": "snapPoints.json"
 }

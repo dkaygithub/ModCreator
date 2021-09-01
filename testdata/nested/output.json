@@ -1,12 +1,20 @@
 {
+  "CameraStates": [],
+  "ComponentTags": {},
+  "CustomUIAssets": [],
+  "Date": "",
   "DecalPallet": [],
+  "GameComplexity": "",
+  "GameMode": "",
+  "GameType": "",
   "Grid": {},
+  "Hands": {},
   "ImagePath": "SCE.png",
   "Lighting": {},
   "LuaScript": "--[[ Lua code. See documentation: http://berserk-games.com/knowledgebase/scripting/ --]]\r\n-- Card size used for autodealing --\r\n\r\n-- global position constants\r\nENCOUNTER_DECK_POS = {-3.8, 1, 5.7}\r\n",
   "LuaScriptState": "",
   "MusicPlayer": {},
-  "Name": "simple",
+  "Note": "",
   "ObjectStates": [
     {
       "Autoraise": true,
@@ -23,7 +31,7 @@
             "g": 1,
             "r": 1
           },
-          "ContainedObjects": null,
+          "ContainedObjects": [],
           "CustomImage": {
             "CustomTile": {
               "Stackable": true,
@@ -116,6 +124,12 @@
       "XmlUI": ""
     }
   ],
+  "SaveName": "",
+  "Sky": "",
   "SnapPoints": [],
-  "TabStates": {}
+  "TabStates": {},
+  "Table": "",
+  "Turns": {},
+  "VersionNumber": "",
+  "XmlUI": ""
 }

@@ -3,6 +3,7 @@ package main
 import (
 	file "ModCreator/file"
 	objects "ModCreator/objects"
+	"ModCreator/reverse"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -13,29 +14,25 @@ import (
 )
 
 var (
-	config = flag.String("config", "testdata/simple", "a directory containing tts mod configs")
+	config  = flag.String("config", "testdata/simple", "a directory containing tts mod configs")
+	rev     = flag.Bool("reverse", false, "Instead of building a json from file structure, build file structure from json.")
+	modfile = flag.String("modfile", "", "where to read from when reversing.")
+
+	expectedStr       = []string{"SaveName", "Date", "VersionNumber", "GameMode", "GameType", "GameComplexity", "Table", "Sky", "Note", "LuaScript", "LuaScriptState", "XmlUI"}
+	expectedObj       = []string{"TabStates", "MusicPlayer", "Grid", "Lighting", "Hands", "ComponentTags", "Turns"}
+	expectedObjArr    = []string{"CameraStates", "DecalPallet", "CustomUIAssets", "SnapPoints"}
+	expectedObjStates = "ObjectStates"
 )
 
 const (
-	luaSubdir  = "luascript"
-	jsonSubdir = "json"
+	textSubdir    = "textfiles"
+	jsonSubdir    = "json"
+	objectsSubdir = "objects"
 )
 
 // Config is how users will specify their mod's configuration.
 type Config struct {
-	Name            string `json:"Name"`
-	Version         string `json:"version"`
-	ImagePath       string `json:"ImagePath"`
-	LuaScriptPath   string `json:"LuaScriptPath"`
-	LuaScriptState  string `json:"LuaScriptState"`
-	TabStatesPath   string `json:"TabStatesPath"`
-	MusicPlayerPath string `json:"MusicPlayerPath"`
-	GridPath        string `json:"GridPath"`
-	LightingPath    string `json:"LightingPath"`
-	DecalPalletPath string `json:"DecalPalletPath"`
-	SnapPointsPath  string `json:"SnapPointsPath"`
-	ObjectDir       string `json:"ObjectDir"`
-	Raw             Obj    `json:"-"`
+	Raw Obj `json:"-"`
 }
 
 // Obj is a simpler way to refer to a json map.
@@ -53,8 +50,20 @@ type Mod struct {
 func main() {
 	flag.Parse()
 
-	lua := file.NewLuaReader(path.Join(*config, luaSubdir))
-	j := file.NewJSONReader(path.Join(*config, jsonSubdir))
+	lua := file.NewLuaOps(path.Join(*config, textSubdir))
+	j := file.NewJSONOps(path.Join(*config, jsonSubdir))
+
+	if *rev {
+		raw, err := prepForReverse(*config, *modfile)
+		if err != nil {
+			log.Fatalf("prepForReverse (%s) failed : %v", *modfile, err)
+		}
+		err = reverse.Write(raw, lua, j, *config, expectedStr, expectedObj, expectedObjArr)
+		if err != nil {
+			log.Fatalf("reverse.Write(<%s>) failed : %v", *modfile, err)
+		}
+		return
+	}
 
 	c, err := readConfig(*config)
 	if err != nil {
@@ -89,10 +98,6 @@ func readConfig(cPath string) (*Config, error) {
 	}
 	var c Config
 
-	err = json.Unmarshal(b, &c)
-	if err != nil {
-		return nil, fmt.Errorf("json.Unmarshal(%s) : %v", b, err)
-	}
 	err = json.Unmarshal(b, &c.Raw)
 	if err != nil {
 		return nil, fmt.Errorf("json.Unmarshal(%s) : %v", b, err)
@@ -100,7 +105,7 @@ func readConfig(cPath string) (*Config, error) {
 	return &c, nil
 }
 
-func generateMod(p string, lua *file.LuaReader, j *file.JSONReader, c *Config) (*Mod, error) {
+func generateMod(p string, lua file.LuaReader, j file.JSONReader, c *Config) (*Mod, error) {
 	if c == nil {
 		return nil, fmt.Errorf("nil config")
 	}
@@ -118,38 +123,41 @@ func generateMod(p string, lua *file.LuaReader, j *file.JSONReader, c *Config) (
 		return lua.EncodeFromFile(s)
 	}
 
-	tryPut(&m, c, "TabStatesPath", "TabStates", plainObj)
-	tryPut(&m, c, "MusicPlayerPath", "MusicPlayer", plainObj)
-	tryPut(&m, c, "GridPath", "Grid", plainObj)
-	tryPut(&m, c, "LightingPath", "Lighting", plainObj)
-
-	tryPut(&m, c, "DecalPalletPath", "DecalPallet", objArray)
-	tryPut(&m, c, "SnapPointsPath", "SnapPoints", objArray)
-
-	tryPut(&m, c, "LuaScriptPath", "LuaScript", luaGet)
-
-	allObjs, err := objects.ParseAllObjectStates(path.Join(p, c.ObjectDir), lua)
-	if err != nil {
-		return nil, fmt.Errorf("objects.ParseAllObjectStates(%s) : %v", path.Join(p, c.ObjectDir), err)
+	ext := "_path"
+	for _, stringbased := range expectedStr {
+		tryPut(&m.Data, stringbased+ext, stringbased, luaGet)
 	}
-	m.Data["ObjectStates"] = allObjs
-	delete(m.Data, "ObjectDir")
+
+	for _, objbased := range expectedObj {
+		tryPut(&m.Data, objbased+ext, objbased, plainObj)
+	}
+
+	for _, objarraybased := range expectedObjArr {
+		tryPut(&m.Data, objarraybased+ext, objarraybased, objArray)
+	}
+
+	allObjs, err := objects.ParseAllObjectStates(path.Join(p, objectsSubdir), lua)
+	if err != nil {
+		return nil, fmt.Errorf("objects.ParseAllObjectStates(%s) : %v", path.Join(p, objectsSubdir), err)
+	}
+	m.Data[expectedObjStates] = allObjs
 	return &m, nil
 }
 
-func tryPut(m *Mod, c *Config, from, to string, fun func(string) (interface{}, error)) {
-	if m == nil || c == nil {
+func tryPut(d *Obj, from, to string, fun func(string) (interface{}, error)) {
+	if d == nil {
 		log.Println("Nil objects")
 		return
 	}
-	if m.Data == nil || c.Raw == nil {
-		log.Println("Nil data inside objects")
-		return
-	}
+
 	var o interface{}
-	fromFile, ok := c.Raw[from]
+	fromFile, ok := (*d)[from]
 	if !ok {
 		fromFile = ""
+		if _, ok := (*d)[to]; ok {
+			// if there is not special key, but there is existant key, don't replace anything.
+			return
+		}
 	}
 	filename, ok := fromFile.(string)
 	if !ok {
@@ -160,8 +168,8 @@ func tryPut(m *Mod, c *Config, from, to string, fun func(string) (interface{}, e
 	o, _ = fun(filename)
 	// ignore error for now
 
-	m.Data[to] = o
-	delete(m.Data, from)
+	(*d)[to] = o
+	delete((*d), from)
 }
 
 func printMod(p string, m *Mod) error {
@@ -171,4 +179,42 @@ func printMod(p string, m *Mod) error {
 	}
 
 	return ioutil.WriteFile(path.Join(p, "output.json"), b, 0644)
+}
+
+// prepForReverse creates the expected subdirectories in config path
+func prepForReverse(cPath, modfile string) (Obj, error) {
+	subDirs := []string{textSubdir, jsonSubdir, objectsSubdir}
+
+	for _, s := range subDirs {
+		p := path.Join(cPath, s)
+		if _, err := os.Stat(p); err == nil {
+			// directory already exists
+		} else if os.IsNotExist(err) {
+			err = os.Mkdir(p, 0777)
+			if err != nil {
+				return nil, err
+			}
+		} else {
+			return nil, fmt.Errorf("Undefined error checking for subdirectory %s : %v", s, err)
+		}
+	}
+
+	mFile, err := os.Open(modfile)
+	if err != nil {
+		return nil, fmt.Errorf("os.Open(%s) : %v", modfile, err)
+	}
+
+	defer mFile.Close()
+
+	b, err := ioutil.ReadAll(mFile)
+	if err != nil {
+		return nil, err
+	}
+	var o Obj
+	err = json.Unmarshal(b, &o)
+	if err != nil {
+		return nil, err
+	}
+
+	return o, nil
 }

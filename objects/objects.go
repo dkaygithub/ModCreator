@@ -3,6 +3,7 @@ package objects
 import (
 	"ModCreator/file"
 	"path"
+	"regexp"
 
 	"encoding/json"
 	"fmt"
@@ -48,17 +49,50 @@ func (o *objConfig) parseFromFile(filepath string) error {
 	o.guid = guid
 
 	// TODO nead ability to read from script folder
-	if sp, ok := o.data["LuaScriptPath"]; ok {
+	if sp, ok := o.data["LuaScript_path"]; ok {
 		if spstr, ok := sp.(string); ok {
 			o.luascriptPath = spstr
-			delete(o.data, "LuaScriptPath")
+			delete(o.data, "LuaScript_path")
 		}
 	}
 
 	return nil
 }
 
-func (o *objConfig) print(l *file.LuaReader) (j, error) {
+func (o *objConfig) parseFromJSON(data map[string]interface{}) error {
+	o.data = data
+	dguid, ok := o.data["GUID"]
+	if !ok {
+		return fmt.Errorf("object (%v) doesn't have a GUID field", data)
+	}
+	guid, ok := dguid.(string)
+	if !ok {
+		return fmt.Errorf("object (%v) doesn't have a string GUID (%s)", dguid, o.data["GUID"])
+	}
+	o.guid = guid
+	o.subObj = []*objConfig{}
+	if rawObjs, ok := o.data["ContainedObjects"]; ok {
+		rawArr, ok := rawObjs.([]interface{})
+		if !ok {
+			return fmt.Errorf("type mismatch in ContainedObjects : %v", rawArr)
+		}
+		for _, rawSubO := range rawArr {
+			subO, ok := rawSubO.(map[string]interface{})
+			if !ok {
+				return fmt.Errorf("type mismatch in ContainedObjects : %v", rawSubO)
+			}
+			so := objConfig{}
+			if err := so.parseFromJSON(subO); err != nil {
+				return fmt.Errorf("printing sub object of %s : %v", o.guid, err)
+			}
+			o.subObj = append(o.subObj, &so)
+		}
+		delete(o.data, "ContainedObjects")
+	}
+	return nil
+}
+
+func (o *objConfig) print(l file.LuaReader) (j, error) {
 	if o.luascriptPath != "" {
 		encoded, err := l.EncodeFromFile(o.luascriptPath)
 		if err != nil {
@@ -79,6 +113,72 @@ func (o *objConfig) print(l *file.LuaReader) (j, error) {
 	o.data["ContainedObjects"] = subs
 
 	return o.data, nil
+}
+
+func (o *objConfig) printToFile(filepath string, l file.LuaWriter) error {
+	// maybe convert LuaScript or LuaScriptState
+	if rawscript, ok := o.data["LuaScript"]; ok {
+		if script, ok := rawscript.(string); ok {
+			if len(script) > 80 {
+				createdFile := o.getAGoodFileName() + ".ttslua"
+				o.data["LuaScript_path"] = createdFile
+				l.EncodeToFile(script, createdFile)
+				delete(o.data, "LuaScript")
+			}
+		}
+	}
+	if rawscript, ok := o.data["LuaScriptState"]; ok {
+		if script, ok := rawscript.(string); ok {
+			if len(script) > 80 {
+				createdFile := o.getAGoodFileName() + ".txt"
+				o.data["LuaScriptState_path"] = createdFile
+				l.EncodeToFile(script, createdFile)
+				delete(o.data, "LuaScriptState")
+			}
+		}
+	}
+
+	// recurse if need be
+	if o.subObj != nil && len(o.subObj) > 0 {
+		subDir := path.Join(filepath, o.guid)
+		err := os.Mkdir(subDir, 0644)
+		if err != nil {
+			return err
+		}
+		for _, subo := range o.subObj {
+			err = subo.printToFile(subDir, l)
+			if err != nil {
+				return err
+			}
+		}
+	}
+
+	// print self
+	b, err := json.MarshalIndent(o.data, "", "  ")
+	if err != nil {
+		return err
+	}
+	fname := path.Join(filepath, o.getAGoodFileName()+".json")
+	return ioutil.WriteFile(fname, b, 0644)
+
+}
+
+func (o *objConfig) getAGoodFileName() string {
+	// only let alphanumberic, _, -, be put into names
+	reg, err := regexp.Compile("[^a-zA-Z0-9_-]+")
+	if err != nil {
+		return o.guid
+	}
+	rawName, ok := o.data["Name"]
+	if !ok {
+		return o.guid
+	}
+	name, ok := rawName.(string)
+	if !ok {
+		return o.guid
+	}
+	n := reg.ReplaceAllString(name, "")
+	return n + "." + o.guid
 }
 
 type db struct {
@@ -113,7 +213,7 @@ func (d *db) addObj(filepath string, isRoot bool) error {
 	return nil
 }
 
-func (d *db) print(l *file.LuaReader) (objArray, error) {
+func (d *db) print(l file.LuaReader) (objArray, error) {
 	var oa objArray
 	for _, o := range d.root {
 		printed, err := o.print(l)
@@ -134,7 +234,7 @@ func (d *db) print(l *file.LuaReader) (objArray, error) {
 // --bar.json (guid=888)
 // --888/
 //    --baz.json (guid=999) << this is a child of bar.json
-func ParseAllObjectStates(root string, l *file.LuaReader) ([]map[string]interface{}, error) {
+func ParseAllObjectStates(root string, l file.LuaReader) ([]map[string]interface{}, error) {
 	d := db{
 		all: map[string]*objConfig{},
 	}
@@ -171,4 +271,21 @@ func parseFile(filepath string, isRoot bool, d *db) error {
 	}
 
 	return d.addObj(filepath, isRoot)
+}
+
+// PrintObjectStates takes a list of json objects and prints them in the
+// expected format outlined by ParseAllObjectStates
+func PrintObjectStates(root string, f file.LuaWriter, objs []map[string]interface{}) error {
+	for _, rootObj := range objs {
+		oc := objConfig{}
+		err := oc.parseFromJSON(rootObj)
+		if err != nil {
+			return err
+		}
+		err = oc.printToFile(root, f)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
