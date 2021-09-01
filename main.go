@@ -34,7 +34,8 @@ type Config struct {
 	LightingPath    string `json:"LightingPath"`
 	DecalPalletPath string `json:"DecalPalletPath"`
 	SnapPointsPath  string `json:"SnapPointsPath"`
-	ObjectDir       string
+	ObjectDir       string `json:"ObjectDir"`
+	Raw             Obj    `json:"-"`
 }
 
 // Obj is a simpler way to refer to a json map.
@@ -46,33 +47,22 @@ type ObjArray []map[string]interface{}
 // Mod is used as the accurate representation of what gets printed when
 // module creation is done
 type Mod struct {
-	SaveName       string
-	EpochTime      int64
-	Date           string
-	Tags           []string
-	TabStates      Obj
-	MusicPlayer    Obj
-	Grid           Obj
-	Lighting       Obj
-	DecalPallet    ObjArray
-	LuaScript      string
-	LuaScriptState string
-	Decals         ObjArray
-	ObjectStates   ObjArray
-	SnapPoints     ObjArray
+	Data Obj
 }
 
 func main() {
 	flag.Parse()
 
-	lua := file.NewReader(path.Join(*config, luaSubdir))
+	lua := file.NewLuaReader(path.Join(*config, luaSubdir))
+	j := file.NewJSONReader(path.Join(*config, jsonSubdir))
 
 	c, err := readConfig(*config)
 	if err != nil {
 		fmt.Printf("readConfig(%s) : %v\n", *config, err)
 		return
 	}
-	m, err := generateMod(*config, lua, c)
+
+	m, err := generateMod(*config, lua, j, c)
 	if err != nil {
 		fmt.Printf("generateMod(<config>) : %v\n", err)
 		return
@@ -103,109 +93,82 @@ func readConfig(cPath string) (*Config, error) {
 	if err != nil {
 		return nil, fmt.Errorf("json.Unmarshal(%s) : %v", b, err)
 	}
+	err = json.Unmarshal(b, &c.Raw)
+	if err != nil {
+		return nil, fmt.Errorf("json.Unmarshal(%s) : %v", b, err)
+	}
 	return &c, nil
 }
 
-func generateMod(p string, lua *file.LuaReader, c *Config) (*Mod, error) {
+func generateMod(p string, lua *file.LuaReader, j *file.JSONReader, c *Config) (*Mod, error) {
 	if c == nil {
 		return nil, fmt.Errorf("nil config")
 	}
 	var m Mod
 
-	m.SaveName = c.Name
+	m.Data = c.Raw
 
-	putEncodedJSON(&m.TabStates, p, c.TabStatesPath)
-
-	putEncodedJSON(&m.MusicPlayer, p, c.MusicPlayerPath)
-
-	putEncodedJSON(&m.Grid, p, c.GridPath)
-
-	putEncodedJSON(&m.Lighting, p, c.LightingPath)
-
-	putEncodedJSONArray(&m.DecalPallet, p, c.DecalPalletPath)
-	putEncodedJSONArray(&m.SnapPoints, p, c.DecalPalletPath)
-
-	encoded, err := lua.EncodeFromFile(c.LuaScriptPath)
-	if err != nil {
-		return nil, fmt.Errorf("lua.EncodeFromFile(%s) : %v", c.LuaScriptPath, err)
+	plainObj := func(s string) (interface{}, error) {
+		return j.ReadObj(s)
 	}
-	m.LuaScript = encoded
-	m.LuaScriptState = c.LuaScriptState
+	objArray := func(s string) (interface{}, error) {
+		return j.ReadObjArray(s)
+	}
+	luaGet := func(s string) (interface{}, error) {
+		return lua.EncodeFromFile(s)
+	}
 
-	m.ObjectStates, err = objects.ParseAllObjectStates(path.Join(p, c.ObjectDir), lua)
+	tryPut(&m, c, "TabStatesPath", "TabStates", plainObj)
+	tryPut(&m, c, "MusicPlayerPath", "MusicPlayer", plainObj)
+	tryPut(&m, c, "GridPath", "Grid", plainObj)
+	tryPut(&m, c, "LightingPath", "Lighting", plainObj)
+
+	tryPut(&m, c, "DecalPalletPath", "DecalPallet", objArray)
+	tryPut(&m, c, "SnapPointsPath", "SnapPoints", objArray)
+
+	tryPut(&m, c, "LuaScriptPath", "LuaScript", luaGet)
+
+	allObjs, err := objects.ParseAllObjectStates(path.Join(p, c.ObjectDir), lua)
 	if err != nil {
 		return nil, fmt.Errorf("objects.ParseAllObjectStates(%s) : %v", path.Join(p, c.ObjectDir), err)
 	}
+	m.Data["ObjectStates"] = allObjs
+	delete(m.Data, "ObjectDir")
 	return &m, nil
 }
 
-func putEncodedJSON(to *Obj, p, f string) {
-	jsonEnc, err := encodeJSON(p, f)
-	if err != nil {
-		log.Printf("encodeJson(%s,%s) : %v\n", p, f, err)
-		*to = Obj{}
+func tryPut(m *Mod, c *Config, from, to string, fun func(string) (interface{}, error)) {
+	if m == nil || c == nil {
+		log.Println("Nil objects")
 		return
 	}
-	*to = jsonEnc
-	return
-}
+	if m.Data == nil || c.Raw == nil {
+		log.Println("Nil data inside objects")
+		return
+	}
+	var o interface{}
+	fromFile, ok := c.Raw[from]
+	if !ok {
+		fromFile = ""
+	}
+	filename, ok := fromFile.(string)
+	if !ok {
+		log.Printf("non string filename found: %s", fromFile)
+		filename = ""
+	}
 
-func putEncodedJSONArray(to *ObjArray, p, f string) {
-	jsonEnc, err := encodeJSONArray(p, f)
-	if err != nil {
-		log.Printf("encodeJsonArray(%s,%s) : %v\n", p, f, err)
-		*to = ObjArray{}
-		return
-	}
-	*to = jsonEnc
-	return
+	o, _ = fun(filename)
+	// ignore error for now
+
+	m.Data[to] = o
+	delete(m.Data, from)
 }
 
 func printMod(p string, m *Mod) error {
-	b, err := json.MarshalIndent(m, "", "  ")
+	b, err := json.MarshalIndent(m.Data, "", "  ")
 	if err != nil {
 		return fmt.Errorf("json.MarshalIndent(<mod>) : %v", err)
 	}
 
 	return ioutil.WriteFile(path.Join(p, "output.json"), b, 0644)
-}
-
-func encodeJSON(configPath, f string) (Obj, error) {
-	p := path.Join(configPath, jsonSubdir, f)
-	jFile, err := os.Open(p)
-	// if we os.Open returns an error then handle it
-	if err != nil {
-		return nil, fmt.Errorf("os.Open(%s): %v", p, err)
-	}
-	defer jFile.Close()
-
-	b, err := ioutil.ReadAll(jFile)
-	if err != nil {
-		return nil, err
-	}
-
-	var v Obj
-	json.Unmarshal([]byte(b), &v)
-
-	return v, nil
-}
-
-func encodeJSONArray(configPath, f string) (ObjArray, error) {
-	p := path.Join(configPath, jsonSubdir, f)
-	jFile, err := os.Open(p)
-	// if we os.Open returns an error then handle it
-	if err != nil {
-		return nil, fmt.Errorf("os.Open(%s): %v", p, err)
-	}
-	defer jFile.Close()
-
-	b, err := ioutil.ReadAll(jFile)
-	if err != nil {
-		return nil, err
-	}
-
-	var v ObjArray
-	json.Unmarshal([]byte(b), &v)
-
-	return v, nil
 }

@@ -12,8 +12,8 @@ type LuaReader struct {
 	basepath string
 }
 
-// NewReader initializes our object on a directory
-func NewReader(base string) *LuaReader {
+// NewLuaReader initializes our object on a directory
+func NewLuaReader(base string) *LuaReader {
 	return &LuaReader{
 		basepath: base,
 	}

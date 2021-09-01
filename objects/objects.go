@@ -2,6 +2,7 @@ package objects
 
 import (
 	"ModCreator/file"
+	"path"
 
 	"encoding/json"
 	"fmt"
@@ -65,6 +66,18 @@ func (o *objConfig) print(l *file.LuaReader) (j, error) {
 		}
 		o.data["LuaScript"] = encoded
 	}
+
+	subs := []j{}
+	for _, sub := range o.subObj {
+		printed, err := sub.print(l)
+		if err != nil {
+			return nil, err
+		}
+		subs = append(subs, printed)
+	}
+
+	o.data["ContainedObjects"] = subs
+
 	return o.data, nil
 }
 
@@ -85,7 +98,6 @@ func (d *db) addObj(filepath string, isRoot bool) error {
 		d.root = append(d.root, &o)
 	} else {
 		// find parent based on filepath name
-
 		paths := strings.Split(filepath, "/")
 		if len(paths) < 2 {
 			return fmt.Errorf("could not identify parent path in %s", filepath)
@@ -95,7 +107,6 @@ func (d *db) addObj(filepath string, isRoot bool) error {
 		if !ok {
 			return fmt.Errorf("could not find object with guid %s, looking from %s", folderName, filepath)
 		}
-
 		parent.subObj = append(parent.subObj, &o)
 	}
 	d.all[o.guid] = &o
@@ -134,20 +145,20 @@ func ParseAllObjectStates(root string, l *file.LuaReader) ([]map[string]interfac
 	return d.print(l)
 }
 
-func parseFolder(path string, isRoot bool, d *db) error {
-	files, err := ioutil.ReadDir(path)
+func parseFolder(p string, isRoot bool, d *db) error {
+	files, err := ioutil.ReadDir(p)
 	if err != nil {
-		return fmt.Errorf("ioutil.ReadDir(%s) : %v", path, err)
+		return fmt.Errorf("ioutil.ReadDir(%s) : %v", p, err)
 	}
 	folders := make([]fs.FileInfo, 0)
 	for _, file := range files {
 		if file.IsDir() {
 			folders = append(folders, file)
 		}
-		parseFile(path+"/"+file.Name(), isRoot, d)
+		parseFile(path.Join(p, file.Name()), isRoot, d)
 	}
 	for _, folder := range folders {
-		parseFolder(path+"/"+folder.Name(), false, d)
+		parseFolder(path.Join(p, folder.Name()), false, d)
 	}
 	return nil
 }

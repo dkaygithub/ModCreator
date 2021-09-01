@@ -8,5 +8,6 @@
   "GridPath": "grid.json",
   "LightingPath": "lighting.json",
   "DecalPalletPath": "decalPallet.json",
+  "SnapPointsPath": "snapPoints.json",
   "ObjectDir": "objects"
 }
