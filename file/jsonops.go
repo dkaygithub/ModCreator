@@ -82,3 +82,21 @@ func (j *JSONOps) WriteObjArray(m []map[string]interface{}, filename string) err
 	}
 	return ioutil.WriteFile(path.Join(j.basepath, filename), b, 0644)
 }
+
+// ReadRawFile allows for anyone who needs to to read json without objects.
+func ReadRawFile(filename string) (map[string]interface{}, error) {
+	jFile, err := os.Open(filename)
+	if err != nil {
+		return nil, fmt.Errorf("os.Open(%s): %v", filename, err)
+	}
+	defer jFile.Close()
+
+	b, err := ioutil.ReadAll(jFile)
+	if err != nil {
+		return nil, err
+	}
+
+	var v map[string]interface{}
+	json.Unmarshal(b, &v)
+	return v, nil
+}

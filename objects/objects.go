@@ -17,10 +17,11 @@ type j map[string]interface{}
 type objArray []map[string]interface{}
 
 type objConfig struct {
-	guid          string
-	data          j
-	luascriptPath string
-	subObj        []*objConfig
+	guid               string
+	data               j
+	luascriptPath      string
+	luascriptstatePath string
+	subObj             []*objConfig
 }
 
 func (o *objConfig) parseFromFile(filepath string) error {
@@ -53,6 +54,12 @@ func (o *objConfig) parseFromFile(filepath string) error {
 		if spstr, ok := sp.(string); ok {
 			o.luascriptPath = spstr
 			delete(o.data, "LuaScript_path")
+		}
+	}
+	if ssp, ok := o.data["LuaScriptState_path"]; ok {
+		if sspstr, ok := ssp.(string); ok {
+			o.luascriptstatePath = sspstr
+			delete(o.data, "LuaScriptState_path")
 		}
 	}
 
@@ -100,6 +107,13 @@ func (o *objConfig) print(l file.LuaReader) (j, error) {
 		}
 		o.data["LuaScript"] = encoded
 	}
+	if o.luascriptstatePath != "" {
+		encoded, err := l.EncodeFromFile(o.luascriptstatePath)
+		if err != nil {
+			return j{}, fmt.Errorf("l.EncodeFromFile(%s) : %v", o.luascriptstatePath, err)
+		}
+		o.data["LuaScriptState"] = encoded
+	}
 
 	subs := []j{}
 	for _, sub := range o.subObj {
@@ -109,9 +123,9 @@ func (o *objConfig) print(l file.LuaReader) (j, error) {
 		}
 		subs = append(subs, printed)
 	}
-
-	o.data["ContainedObjects"] = subs
-
+	if len(subs) > 0 {
+		o.data["ContainedObjects"] = subs
+	}
 	return o.data, nil
 }
 
