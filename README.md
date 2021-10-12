@@ -9,22 +9,22 @@ workshop mod.
 $config = directory to read from
 $config/output.json = file to output to
 
-go run main.go --config=C:\Users\$USER\Documents\Projects\MyProject
+go run main.go --config=C:\Users\USER\Documents\Projects\MyProject
 
 ### Generate a config directory from existing json file
 
 $config = directory to write to
 $ttsmodfile = existing tts mod file to read from
 
-go run main.go --reverse --config=C:\Users\$USER\Documents\Projects\MyProject --ttsmodfile="C:\Users\Daniel\Documents\My Games\Tabletop Simulator\Mods\Workshop\existingMod.json"
+go run main.go --reverse --config=C:\Users\USER\Documents\Projects\MyProject --ttsmodfile="C:\Users\USER\Documents\My Games\Tabletop Simulator\Mods\Workshop\existingMod.json"
 
 ### Testing a TTS mod conversion
 
 // reverse existing modfile $ttsmodfile into director $config
-go run main.go --reverse --config=C:\Users\$USER\Documents\Projects\MyProject --ttsmodfile="C:\Users\Daniel\Documents\My Games\Tabletop Simulator\Mods\Workshop\existingMod.json"
+go run main.go --reverse --config=C:\Users\USER\Documents\Projects\MyProject --ttsmodfile="C:\Users\USER\Documents\My Games\Tabletop Simulator\Mods\Workshop\existingMod.json"
 
 // generate a modfile based on $config directory
-go run main.go --config=C:\Users\$USER\Documents\Projects\MyProject
+go run main.go --config=C:\Users\USER\Documents\Projects\MyProject
 
 // compare the original modfile ($ttsmodfile) with new generated modfile ($altmodfile)
-go test . --ttsmodfile="C:\Users\$USER\Documents\My Games\Tabletop Simulator\Mods\Workshop\existingMod.json" --altmodfile=""C:\Users\$USER\Documents\Projects\MyProject\output.json""
+go test . --ttsmodfile="C:\Users\USER\Documents\My Games\Tabletop Simulator\Mods\Workshop\existingMod.json" --altmodfile=""C:\Users\USER\Documents\Projects\MyProject\output.json""
