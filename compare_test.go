@@ -79,7 +79,7 @@ func toObjArray(i interface{}) ([]map[string]interface{}, error) {
 
 func compareObjArrays(t *testing.T, guid string, a, b []map[string]interface{}) error {
 	if len(a) != len(b) {
-		return fmt.Errorf("length mismatch on %s", guid)
+		return fmt.Errorf("length mismatch %v vs %v", len(a), len(b))
 	}
 	am, err := convertToMetaMap(a)
 	if err != nil {
@@ -137,7 +137,7 @@ func compareObjs(t *testing.T, guid string, a, b map[string]interface{}) error {
 
 		err = compareObjArrays(t, guid, aArr, bArr)
 		if err != nil {
-			return fmt.Errorf("subObjects of %s have diff: %v", guid, err)
+			return fmt.Errorf("subObjects of %s[ContainedObjects] have diff: %v", guid, err)
 		}
 
 		delete(a, subKey)

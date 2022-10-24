@@ -114,6 +114,10 @@ func convertToObjArray(v interface{}) ([]map[string]interface{}, error) {
 	for _, rv := range rawArr {
 		objVal, ok := rv.(map[string]interface{})
 		if !ok {
+			if rv == nil {
+				// if for some reason an array has nil object, just skip
+				continue
+			}
 			return nil, fmt.Errorf("expected type json object, got %v", objVal)
 		}
 		arr = append(arr, objVal)
