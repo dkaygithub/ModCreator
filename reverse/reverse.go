@@ -1,11 +1,13 @@
 package reverse
 
 import (
+	"ModCreator/bundler"
 	"ModCreator/file"
 	"ModCreator/objects"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"log"
 	"path"
 )
 
@@ -15,29 +17,35 @@ func Write(raw map[string]interface{}, lua file.LuaWriter, j file.JSONWriter, ba
 	pathExt := "_path"
 	for _, strKey := range expectedStr {
 		rawVal, ok := raw[strKey]
-		if ok {
-			strVal, ok := rawVal.(string)
-			if !ok {
-				return fmt.Errorf("expected string value in key %s, got %v", strKey, rawVal)
-			}
-
-			// decide if creating a separte file is worth it
-			if len(strVal) < 80 {
-				continue
-			}
-
-			ext := ".txt"
-			if strKey == "LuaScript" {
-				ext = ".ttslua"
-			}
-			createdFile := strKey + ext
-			err := lua.EncodeToFile(strVal, createdFile)
-			if err != nil {
-				return fmt.Errorf("lua.EncodeToFile(<value>, %s) : %v", createdFile, err)
-			}
-			raw[strKey+pathExt] = createdFile
-			delete(raw, strKey)
+		if !ok {
+			log.Printf("expected string value in key %s, key not found\n", strKey)
+			continue
 		}
+		strVal, ok := rawVal.(string)
+		if !ok {
+			return fmt.Errorf("expected string value in key %s, got %v", strKey, rawVal)
+		}
+		strVal, err := bundler.Unbundle(strVal)
+		if err != nil {
+			return fmt.Errorf("bundler.Unbundle(%s)\n: %v", strVal, err)
+		}
+		// decide if creating a separte file is worth it
+		if len(strVal) < 80 {
+			continue
+		}
+
+		ext := ".txt"
+		if strKey == "LuaScript" {
+			ext = ".ttslua"
+		}
+		createdFile := strKey + ext
+
+		err = lua.EncodeToFile(strVal, createdFile)
+		if err != nil {
+			return fmt.Errorf("lua.EncodeToFile(<value>, %s) : %v", createdFile, err)
+		}
+		raw[strKey+pathExt] = createdFile
+		delete(raw, strKey)
 	}
 
 	for _, objKey := range expectedObj {

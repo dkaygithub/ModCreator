@@ -25,7 +25,7 @@ var (
 )
 
 const (
-	textSubdir    = "textfiles"
+	textSubdir    = "src"
 	jsonSubdir    = "json"
 	objectsSubdir = "objects"
 )

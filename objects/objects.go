@@ -1,7 +1,9 @@
 package objects
 
 import (
+	"ModCreator/bundler"
 	"ModCreator/file"
+	"log"
 	"path"
 	"regexp"
 
@@ -115,6 +117,15 @@ func (o *objConfig) print(l file.LuaReader) (j, error) {
 		o.data["LuaScriptState"] = encoded
 	}
 
+	replaced, err := l.ReplaceRequire(o.data["LuaScript"].(string))
+	if o.data["GUID"] == "15bb07" {
+		log.Printf("printing 15bb07 with script <%s>", o.data["LuaScript"])
+	}
+	o.data["LuaScript"] = replaced
+	if err != nil {
+		return j{}, fmt.Errorf("l.ReplaceRequire(%s) : %v", o.data["LuaScript"], err)
+	}
+
 	subs := []j{}
 	for _, sub := range o.subObj {
 		printed, err := sub.print(l)
@@ -133,12 +144,17 @@ func (o *objConfig) printToFile(filepath string, l file.LuaWriter) error {
 	// maybe convert LuaScript or LuaScriptState
 	if rawscript, ok := o.data["LuaScript"]; ok {
 		if script, ok := rawscript.(string); ok {
+			script, err := bundler.Unbundle(script)
+			if err != nil {
+				return fmt.Errorf("bundler.Unbundle(%s)\n: %v", script, err)
+			}
 			if len(script) > 80 {
 				createdFile := o.getAGoodFileName() + ".ttslua"
 				o.data["LuaScript_path"] = createdFile
 				l.EncodeToFile(script, createdFile)
 				delete(o.data, "LuaScript")
 			}
+			o.data["LuaScript"] = script
 		}
 	}
 	if rawscript, ok := o.data["LuaScriptState"]; ok {
